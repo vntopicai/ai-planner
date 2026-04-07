@@ -1,0 +1,24 @@
+{
+  "name": "ai-planner",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI Planner Local - CLI-first local setup for agent-ready development environments",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run start:api\" \"npm run start:web\"",
+    "start:api": "node packages/cli/dist/index.js ui",
+    "start:web": "npm run dev --workspace=@ai-planner/web",
+    "build": "npm run build --workspaces",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

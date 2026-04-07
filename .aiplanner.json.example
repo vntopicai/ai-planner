@@ -1,0 +1,8 @@
+{
+  "preferredSkillsDirs": [
+    "fixtures/local-skills",
+    "C:/team/skills",
+    "C:/users/me/skills"
+  ],
+  "defaultAgent": "antigravity"
+}

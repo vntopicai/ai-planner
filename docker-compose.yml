@@ -1,0 +1,27 @@
+services:
+  deepwiki:
+    image: ghcr.io/asyncfuncai/deepwiki-open:latest
+    container_name: ai-planner-deepwiki
+    ports:
+      - "3000:3000"
+      - "8001:8001"
+    environment:
+      # Fill at least one LLM provider
+      GOOGLE_API_KEY: ${GEMINI_API_KEY}
+      GOOGLE_GENERATIVE_AI_API_KEY: ${GEMINI_API_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      # Default model provider: google | openai | anthropic
+      DEFAULT_PROVIDER: ${LLM_PROVIDER:-openai}
+    volumes:
+      - deepwiki-data:/app/data
+      - ./:/workspace
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  deepwiki-data:

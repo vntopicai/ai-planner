@@ -1,0 +1,33 @@
+{
+  "name": "vietnam-stock-market-api",
+  "version": "1.0.50",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "build": "bun build src/index.ts --outdir dist",
+    "start": "bun run src/index.ts",
+    "test": "bun test",
+    "db:generate": "bun run src/scripts/generate.ts",
+    "db:migrate": "bun run src/scripts/migrate.ts",
+    "db:seed": "bun run src/scripts/seed.ts",
+    "db:import": "bun run src/scripts/import-csv.ts",
+    "db:studio": "drizzle-kit studio"
+  },
+  "dependencies": {
+    "@elysiajs/cors": "latest",
+    "@elysiajs/swagger": "latest",
+    "csv-parse": "latest",
+    "date-fns": "latest",
+    "dotenv": "^17.2.4",
+    "drizzle-orm": "^0.45.1",
+    "elysia": "latest",
+    "pg": "latest",
+    "postgres": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/pg": "latest",
+    "bun-types": "latest",
+    "drizzle-kit": "^0.31.9"
+  }
+}

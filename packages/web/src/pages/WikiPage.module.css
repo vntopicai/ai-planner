@@ -1,0 +1,57 @@
+.root { max-width: 860px; margin: 0 auto; }
+.title { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
+.desc { color: var(--text-secondary); margin-bottom: 28px; }
+.inputRow { display: flex; gap: 12px; margin-bottom: 24px; }
+.input {
+  flex: 1; padding: 12px 16px; background: var(--bg-card);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--text-primary); font-size: 14px; font-family: inherit;
+  outline: none; transition: border-color 0.15s;
+}
+.input:focus { border-color: var(--accent); }
+.input::placeholder { color: var(--text-muted); }
+.btn {
+  padding: 12px 24px; background: var(--accent); color: white;
+  border: none; border-radius: var(--radius-sm); font-size: 14px;
+  font-weight: 600; cursor: pointer; transition: all 0.15s; white-space: nowrap;
+}
+.btn:hover:not(:disabled) { background: var(--accent-hover); }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.loading { display: flex; align-items: center; gap: 12px; color: var(--text-secondary); padding: 32px 0; }
+.spinner {
+  width: 20px; height: 20px; border: 2px solid var(--border);
+  border-top-color: var(--accent); border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.error {
+  background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3);
+  padding: 16px; border-radius: var(--radius-sm); color: var(--red); font-size: 14px;
+}
+.error code { font-family: 'JetBrains Mono', monospace; }
+.infoBox {
+  margin-bottom: 16px; padding: 12px 16px; background: var(--bg-hover);
+  border: 1px solid var(--border-bright); border-radius: var(--radius-sm);
+  color: var(--text-secondary); font-size: 13px;
+}
+.infoBox code { font-family: 'JetBrains Mono', monospace; }
+.techStack { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+.techLabel { font-size: 13px; color: var(--text-muted); }
+.techBadge {
+  padding: 3px 10px; background: var(--accent-glow); border: 1px solid rgba(109,103,255,0.3);
+  border-radius: 20px; font-size: 12px; color: var(--accent); font-weight: 500;
+}
+.skillsBtn {
+  margin-left: 8px; padding: 3px 12px; background: none; border: 1px solid var(--accent);
+  border-radius: 20px; color: var(--accent); font-size: 12px; cursor: pointer;
+  transition: all 0.15s; font-family: inherit;
+}
+.skillsBtn:hover { background: var(--accent); color: white; }
+.deepwikiLink {
+  padding: 3px 12px; border: 1px solid var(--border-bright);
+  border-radius: 20px; color: var(--text-secondary); font-size: 12px;
+  text-decoration: none; transition: all 0.15s;
+}
+.deepwikiLink:hover { border-color: var(--accent); color: var(--accent); }
+.wikiContent { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; overflow: auto; }
+.markdown { white-space: pre-wrap; font-size: 13px; color: var(--text-secondary); line-height: 1.7; }
