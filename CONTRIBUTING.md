@@ -54,6 +54,8 @@ Use these fixtures when changing the CLI-first flows:
   - existing-project fixture
 - `fixtures/local-skills`
   - local recommendation-source fixture
+- `fixtures/new-project-idea`
+  - new-project prompt fixture for the planning flow
 
 ## Tests
 
@@ -69,6 +71,18 @@ Useful manual smoke test:
 ```bash
 node packages/cli/dist/index.js existing fixtures/existing-project --skip-wiki --yes --skip-install
 ```
+
+Useful new-project checks:
+
+```bash
+node packages/cli/test/run-tests.mjs
+```
+
+This includes a non-interactive regression test for:
+
+- `Idea -> planning result -> implementation plan -> skill recommendations -> local install`
+
+If you want to do a manual smoke test for `new`, use the prompt in `fixtures/new-project-idea/prompt.md` and save output into that fixture folder or another temporary folder outside the repo.
 
 ## What To Focus On
 

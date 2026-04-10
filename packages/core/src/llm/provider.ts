@@ -8,6 +8,13 @@ export interface LLMMessage {
 export interface LLMResponse {
   text: string
   provider: LLMProvider
+  model: string
+}
+
+export interface LLMRuntimeInfo {
+  provider: LLMProvider
+  model: string
+  source: 'env'
 }
 
 /**
@@ -19,25 +26,34 @@ export async function callLLM(
   messages: LLMMessage[],
   opts: { provider?: LLMProvider; maxTokens?: number } = {}
 ): Promise<LLMResponse> {
-  const provider = opts.provider ?? detectProvider()
+  const runtime = resolveLLMRuntimeInfo(opts.provider)
   const maxTokens = opts.maxTokens ?? 2048
 
-  switch (provider) {
+  switch (runtime.provider) {
     case 'gemini':
-      return callGemini(messages, maxTokens)
+      return callGemini(messages, maxTokens, runtime.model)
     case 'openai':
-      return callOpenAI(messages, maxTokens)
+      return callOpenAI(messages, maxTokens, runtime.model)
     case 'claude':
-      return callClaude(messages, maxTokens)
+      return callClaude(messages, maxTokens, runtime.model)
     case 'openrouter':
-      return callOpenRouter(messages, maxTokens)
+      return callOpenRouter(messages, maxTokens, runtime.model)
     default:
-      throw new Error(`Unknown LLM provider: ${provider}`)
+      throw new Error(`Unknown LLM provider: ${runtime.provider}`)
+  }
+}
+
+export function getDefaultLLMRuntimeInfo(preferredProvider?: LLMProvider): LLMRuntimeInfo {
+  const provider = preferredProvider ?? getConfiguredProvider()
+  return {
+    provider,
+    model: resolveModelForProvider(provider),
+    source: 'env',
   }
 }
 
 function detectProvider(): LLMProvider {
-  const preferred = (process.env.LLM_PROVIDER ?? 'gemini') as LLMProvider
+  const preferred = getConfiguredProvider()
   const keyMap: Record<LLMProvider, string> = {
     gemini: 'GEMINI_API_KEY',
     openai: 'OPENAI_API_KEY',
@@ -56,9 +72,41 @@ function detectProvider(): LLMProvider {
   )
 }
 
-async function callGemini(messages: LLMMessage[], maxTokens: number): Promise<LLMResponse> {
+function getConfiguredProvider(): LLMProvider {
+  const configured = (process.env.LLM_PROVIDER ?? 'gemini') as LLMProvider
+  if (['gemini', 'openai', 'claude', 'openrouter'].includes(configured)) {
+    return configured
+  }
+
+  return 'gemini'
+}
+
+function resolveLLMRuntimeInfo(preferredProvider?: LLMProvider): LLMRuntimeInfo {
+  const provider = preferredProvider ?? detectProvider()
+  return {
+    provider,
+    model: resolveModelForProvider(provider),
+    source: 'env',
+  }
+}
+
+function resolveModelForProvider(provider: LLMProvider): string {
+  switch (provider) {
+    case 'gemini':
+      return process.env.GEMINI_MODEL ?? 'gemini-2.5-flash'
+    case 'openai':
+      return process.env.OPENAI_MODEL ?? 'gpt-4o-mini'
+    case 'claude':
+      return process.env.ANTHROPIC_MODEL ?? 'claude-3-haiku-20240307'
+    case 'openrouter':
+      return process.env.OPENROUTER_MODEL ?? 'google/gemini-2.0-flash-exp:free'
+    default:
+      throw new Error(`Unknown LLM provider: ${provider}`)
+  }
+}
+
+async function callGemini(messages: LLMMessage[], maxTokens: number, model: string): Promise<LLMResponse> {
   const apiKey = process.env.GEMINI_API_KEY!
-  const model = process.env.GEMINI_MODEL ?? 'gemini-2.5-flash'
 
   // Convert to Gemini format
   const contents = messages
@@ -83,25 +131,25 @@ async function callGemini(messages: LLMMessage[], maxTokens: number): Promise<LL
   if (!res.ok) throw new Error(`Gemini API error: ${res.status} ${await res.text()}`)
   const data = await res.json() as Record<string, unknown>
   const text = (data as any).candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-  return { text, provider: 'gemini' }
+  return { text, provider: 'gemini', model }
 }
 
-async function callOpenAI(messages: LLMMessage[], maxTokens: number): Promise<LLMResponse> {
+async function callOpenAI(messages: LLMMessage[], maxTokens: number, model: string): Promise<LLMResponse> {
   const apiKey = process.env.OPENAI_API_KEY!
 
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ model: 'gpt-4o-mini', messages, max_tokens: maxTokens }),
+    body: JSON.stringify({ model, messages, max_tokens: maxTokens }),
   })
 
   if (!res.ok) throw new Error(`OpenAI API error: ${res.status} ${await res.text()}`)
   const data = await res.json() as Record<string, unknown>
   const text = (data as any).choices?.[0]?.message?.content ?? ''
-  return { text, provider: 'openai' }
+  return { text, provider: 'openai', model }
 }
 
-async function callClaude(messages: LLMMessage[], maxTokens: number): Promise<LLMResponse> {
+async function callClaude(messages: LLMMessage[], maxTokens: number, model: string): Promise<LLMResponse> {
   const apiKey = process.env.ANTHROPIC_API_KEY!
   const systemMsg = messages.find((m) => m.role === 'system')?.content
   const chatMessages = messages.filter((m) => m.role !== 'system')
@@ -114,7 +162,7 @@ async function callClaude(messages: LLMMessage[], maxTokens: number): Promise<LL
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-3-haiku-20240307',
+      model,
       max_tokens: maxTokens,
       ...(systemMsg ? { system: systemMsg } : {}),
       messages: chatMessages,
@@ -124,12 +172,11 @@ async function callClaude(messages: LLMMessage[], maxTokens: number): Promise<LL
   if (!res.ok) throw new Error(`Claude API error: ${res.status} ${await res.text()}`)
   const data = await res.json() as Record<string, unknown>
   const text = (data as any).content?.[0]?.text ?? ''
-  return { text, provider: 'claude' }
+  return { text, provider: 'claude', model }
 }
 
-async function callOpenRouter(messages: LLMMessage[], maxTokens: number): Promise<LLMResponse> {
+async function callOpenRouter(messages: LLMMessage[], maxTokens: number, model: string): Promise<LLMResponse> {
   const apiKey = process.env.OPENROUTER_API_KEY!
-  const model = process.env.OPENROUTER_MODEL ?? 'google/gemini-2.0-flash-exp:free'
 
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
@@ -144,5 +191,5 @@ async function callOpenRouter(messages: LLMMessage[], maxTokens: number): Promis
   if (!res.ok) throw new Error(`OpenRouter API error: ${res.status} ${await res.text()}`)
   const data = await res.json() as Record<string, unknown>
   const text = (data as any).choices?.[0]?.message?.content ?? ''
-  return { text, provider: 'openrouter' }
+  return { text, provider: 'openrouter', model }
 }

@@ -12,6 +12,7 @@ packages/*/tsconfig.tsbuildinfo
 packages/*/src/**/*.d.ts
 packages/*/src/**/*.d.ts.map
 packages/*/src/**/*.js.map
+packages/*/src/**/*.js
 .ai-planner/
 temp-*
 .agents/skills/gstack/

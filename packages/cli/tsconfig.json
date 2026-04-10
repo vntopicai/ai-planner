@@ -8,7 +8,7 @@
     "sourceMap": true,
     "baseUrl": ".",
     "paths": {
-      "@ai-planner/core": ["../core/src/index.ts"]
+      "@ai-planner/core": ["../core/dist/index.d.ts"]
     }
   },
   "include": ["src"],

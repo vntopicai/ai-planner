@@ -21,6 +21,7 @@ export async function promptSkillSelection(
   }
 
   console.log(chalk.bold('\n📋 Skill Recommendations:\n'))
+  printSkillRecommendationSummary(groups)
 
   // Build choices with separators
   const choices: Array<{ name: string; value: SkillRecommendation; checked: boolean } | inquirer.Separator> = []
@@ -28,7 +29,7 @@ export async function promptSkillSelection(
   if (groups.essential.length) {
     choices.push(new inquirer.Separator(chalk.red.bold('─── 🔴 Essential ───')))
     groups.essential.forEach((r) => choices.push({
-      name: `${chalk.bold(r.skill.id)} ${chalk.dim(`[${r.skill.repo}]`)} — ${r.reason}`,
+      name: formatCompactSkillChoice(r),
       value: r,
       checked: true, // Pre-select essential
     }))
@@ -37,7 +38,7 @@ export async function promptSkillSelection(
   if (groups.recommended.length) {
     choices.push(new inquirer.Separator(chalk.yellow.bold('─── 🟡 Recommended ───')))
     groups.recommended.forEach((r) => choices.push({
-      name: `${chalk.bold(r.skill.id)} ${chalk.dim(`[${r.skill.repo}]`)} — ${r.reason}`,
+      name: formatCompactSkillChoice(r),
       value: r,
       checked: false,
     }))
@@ -46,7 +47,7 @@ export async function promptSkillSelection(
   if (groups.optional.length) {
     choices.push(new inquirer.Separator(chalk.green.bold('─── 🟢 Optional ───')))
     groups.optional.forEach((r) => choices.push({
-      name: `${chalk.bold(r.skill.id)} ${chalk.dim(`[${r.skill.repo}]`)} — ${r.reason}`,
+      name: formatCompactSkillChoice(r),
       value: r,
       checked: false,
     }))
@@ -58,9 +59,39 @@ export async function promptSkillSelection(
       name: 'selected',
       message: 'Select skills to install (Space to toggle, Enter to confirm):',
       choices,
-      pageSize: 20,
+      pageSize: 12,
     },
   ])
 
   return selected as SkillRecommendation[]
+}
+
+function printSkillRecommendationSummary(
+  groups: Record<'essential' | 'recommended' | 'optional', SkillRecommendation[]>
+): void {
+  const sections: Array<{ title: string; entries: SkillRecommendation[] }> = [
+    { title: 'Essential', entries: groups.essential },
+    { title: 'Recommended', entries: groups.recommended },
+    { title: 'Optional', entries: groups.optional },
+  ]
+
+  for (const section of sections) {
+    if (section.entries.length === 0) continue
+
+    console.log(chalk.bold(`${section.title}:`))
+    section.entries.forEach((recommendation, index) => {
+      const source = recommendation.skill.source ?? 'remote'
+      console.log(
+        `${index + 1}. ${recommendation.skill.id} ${chalk.dim(`[${source}]`)}`
+      )
+      console.log(`   Repo: ${recommendation.skill.repo}`)
+      console.log(`   Why: ${recommendation.reason}`)
+    })
+    console.log('')
+  }
+}
+
+function formatCompactSkillChoice(recommendation: SkillRecommendation): string {
+  const source = recommendation.skill.source ?? 'remote'
+  return `${chalk.bold(recommendation.skill.id)} ${chalk.dim(`[${source}]`)}`
 }

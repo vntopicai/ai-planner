@@ -1,0 +1,3 @@
+Review lại tổng thể dự án, những gì chúng ta đạt được về việc mang lại lợi ích cho cộng đồng dev với AI, Kiến trúc hiện tại có dễ mở rộng để hỗ trợ những AI tooling khác vì mục đích chính của chúng ta là hỗ trợ tốt cho AI dev với những tool trending mới và hiệu quả nhất có thể. 
+Giúp giảm thời gian khởi tạo , khám phá code và thực thi tính năng mới cho dự án? Đâu sẽ là những gợi ý để cải tiến và những tính năng nào có thể thêm vào để tăng độ hữu ích cho dự án này?
+============

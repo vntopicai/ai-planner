@@ -1,11 +1,14 @@
 import { execFile } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { cp, mkdir } from 'node:fs/promises'
+import { cp, mkdir, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import type { Skill } from '../types.js'
 
 const execFileAsync = promisify(execFile)
+
+// Repos that use native agent install methods (not npx skills add)
+const NATIVE_INSTALL_REPOS = new Set(['addyosmani/agent-skills'])
 
 /**
  * Wrapper around `npx skills` CLI.
@@ -54,26 +57,21 @@ export async function installSkills(
     }
   }
 
-  // Group skills by repo for batch install
-  const byRepo = new Map<string, string[]>()
-  for (const s of remoteSkills) {
-    const existing = byRepo.get(s.repo) ?? []
-    existing.push(s.name)
-    byRepo.set(s.repo, existing)
-  }
-
-  for (const [repo, skillNames] of byRepo.entries()) {
+  for (const skill of remoteSkills) {
     try {
-      const skillArgs = skillNames.flatMap((name) => ['--skill', name])
-      await execFileAsync(
-        'npx',
-        ['skills', 'add', repo, '-a', targetAgent, '-y', ...skillArgs],
-        { cwd: options.cwd, timeout: 30000, shell: true }
-      )
-      success.push(...skillNames.map((n) => `${repo}:${n}`))
+      if (NATIVE_INSTALL_REPOS.has(skill.repo)) {
+        await installNativeRepoSkill(skill, targetAgent, options.cwd)
+      } else {
+        await execFileAsync(
+          'npx',
+          ['skills', 'add', skill.repo, '-a', targetAgent, '-y', '--skill', skill.name],
+          { cwd: options.cwd, timeout: 30000, shell: true }
+        )
+      }
+      success.push(`${skill.repo}:${skill.name}`)
     } catch (err) {
-      failed.push(...skillNames.map((n) => `${repo}:${n}`))
-      console.error(`Failed to install skills from ${repo}: ${formatInstallError(err)}`)
+      failed.push(`${skill.repo}:${skill.name}`)
+      console.error(`Failed to install remote skill ${skill.name} from ${skill.repo}: ${formatInstallError(err)}`)
     }
   }
 
@@ -208,6 +206,59 @@ async function installLocalSkill(
   const targetDir = join(resolve(cwd), '.agents', 'skills', skill.name)
   await mkdir(join(resolve(cwd), '.agents', 'skills'), { recursive: true })
   await cp(sourcePath, targetDir, { recursive: true, force: true })
+}
+
+/**
+ * Install skills from repos that use native agent install methods.
+ * For addyosmani/agent-skills: downloads SKILL.md via GitHub raw URL and
+ * places it in .agents/skills/<name>/SKILL.md for local agent discovery.
+ * Instructs the user to run the native install command for full integration.
+ */
+async function installNativeRepoSkill(
+  skill: { repo: string; name: string },
+  _targetAgent: string,
+  cwd?: string
+): Promise<void> {
+  const targetBase = cwd ? resolve(cwd, '.agents', 'skills') : resolve('.agents', 'skills')
+  const targetDir = join(targetBase, skill.name)
+  await mkdir(targetDir, { recursive: true })
+
+  // Download SKILL.md from GitHub raw URL
+  const rawUrl = `https://raw.githubusercontent.com/${skill.repo}/main/skills/${skill.name}/SKILL.md`
+  try {
+    const res = await fetch(rawUrl, { signal: AbortSignal.timeout(10000) })
+    if (res.ok) {
+      const content = await res.text()
+      await writeFile(join(targetDir, 'SKILL.md'), content, 'utf8')
+      return
+    }
+  } catch {
+    // Network unavailable — create a pointer file instead
+  }
+
+  // Fallback: write a pointer file with install instructions
+  const pointer = [
+    `# ${skill.name}`,
+    ``,
+    `Source: https://github.com/${skill.repo}`,
+    ``,
+    `## Install natively for full slash command support:`,
+    ``,
+    `**Gemini CLI:**`,
+    `\`\`\``,
+    `gemini skills install https://github.com/${skill.repo}.git --path skills`,
+    `\`\`\``,
+    ``,
+    `**Claude Code:**`,
+    `\`\`\``,
+    `/plugin marketplace add ${skill.repo}`,
+    `\`\`\``,
+    ``,
+    `**Cursor / Windsurf:**`,
+    `Copy the SKILL.md from skills/${skill.name}/ into .cursor/rules/ or .windsurf/rules/`,
+  ].join('\n')
+
+  await writeFile(join(targetDir, 'SKILL.md'), pointer, 'utf8')
 }
 
 function formatInstallError(error: unknown): string {

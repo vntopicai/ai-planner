@@ -4,7 +4,7 @@
     "gstack": {
       "source": "garrytan/gstack",
       "sourceType": "github",
-      "computedHash": "5104fe618ad63c8f933d0d8af915943be457b6c86f8be8a1c92d7fed380f0e3d"
+      "computedHash": "c9404f19d65ff77d8a57cafa3f534b734729b9f5ec6a103e68b1ff56ad8e41a2"
     },
     "nodejs-backend-patterns": {
       "source": "wshobson/agents",

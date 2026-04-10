@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { readFile } from 'node:fs/promises'
+import { readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import type { AIPlannerConfig } from '../types.js'
 
@@ -35,4 +35,23 @@ export async function loadAIPlannerConfig(cwd = process.cwd()): Promise<AIPlanne
 
 function dedupePaths(paths: string[]): string[] {
   return Array.from(new Set(paths))
+}
+
+/**
+ * Persist a partial config update to .aiplanner.json
+ * Merges with existing config — does not overwrite unrelated fields.
+ */
+export async function saveAIPlannerConfig(
+  updates: Partial<AIPlannerConfig>,
+  cwd = process.cwd()
+): Promise<void> {
+  const configPath = join(resolve(cwd), '.aiplanner.json')
+  let existing: AIPlannerConfig = {}
+  if (existsSync(configPath)) {
+    try {
+      existing = JSON.parse(await readFile(configPath, 'utf8')) as AIPlannerConfig
+    } catch { /* start fresh */ }
+  }
+  const merged = { ...existing, ...updates }
+  await writeFile(configPath, JSON.stringify(merged, null, 2), 'utf8')
 }

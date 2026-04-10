@@ -1,4 +1,8 @@
 import { basename, resolve } from 'node:path'
+import { createReadStream } from 'node:fs'
+import { rm } from 'node:fs/promises'
+import FormData from 'form-data'
+import { createProjectZip } from '../utils/zip.js'
 import type { WikiResult, FlowDiagram, WikiPageResult } from '../types.js'
 
 const DEEPWIKI_URL = process.env.DEEPWIKI_URL ?? 'http://localhost:3000'
@@ -9,6 +13,7 @@ export interface DeepWikiGenerateOptions {
   repoUrl?: string
   localPath?: string
   provider?: string
+  publishToDeepWiki?: boolean
 }
 
 interface DeepWikiModelConfig {
@@ -57,6 +62,9 @@ export async function generateWiki(opts: DeepWikiGenerateOptions): Promise<WikiR
   }
 
   if (localPath) {
+    if (opts.publishToDeepWiki) {
+      return publishLocalWikiToDeepWiki(localPath, requestedProvider)
+    }
     return generateLocalWiki(localPath, requestedProvider)
   }
 
@@ -85,6 +93,36 @@ export async function checkDeepWikiHealth(): Promise<boolean> {
     return res.ok
   } catch {
     return false
+  }
+}
+
+async function publishLocalWikiToDeepWiki(localPath: string, requestedProvider?: string): Promise<WikiResult> {
+  const provider = normalizeProviderName(requestedProvider) ?? 'google'
+  
+  // 1. Create a zip of the local repository
+  const zipPath = await createProjectZip({ sourceDir: localPath })
+
+  try {
+    // 2. Upload to DeepWiki
+    const formData = new FormData()
+    formData.append('provider', provider)
+    formData.append('language', DEFAULT_LANGUAGE)
+    formData.append('file', createReadStream(zipPath))
+
+    const response = await fetch(`${DEEPWIKI_URL}/api/wiki/upload`, {
+      method: 'POST',
+      body: formData as any,
+    })
+
+    if (!response.ok) {
+      throw new Error(`DeepWiki upload error: ${response.status} - ${await response.text()}`)
+    }
+
+    const data = await response.json() as Record<string, unknown>
+    return parseWikiResponse(data)
+  } finally {
+    // 3. Clean up the temporary zip file
+    await rm(zipPath, { force: true })
   }
 }
 

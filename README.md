@@ -6,9 +6,9 @@ AI Planner Local helps a developer prepare their own machine for AI-assisted wor
 
 - analyze an existing local repo
 - generate local wiki context with DeepWiki
-- plan a new project with gstack-backed workflows
+- plan a new project with customizable planners (direct-llm, gsd, gstack)
 - recommend the right skills for the current project
-- install those skills into the local agent environment
+- install those skills into the local agent environment natively
 
 The current MVP is intentionally:
 
@@ -20,11 +20,13 @@ The current MVP is intentionally:
 
 ## What AI Planner Local Does
 
-AI Planner Local is a thin orchestrator around a few strong tools:
+AI Planner Local is a thin orchestrator around a few strong tools and concepts:
 
-- [DeepWiki Open](https://github.com/AsyncFuncAI/deepwiki-open) for wiki generation and wiki browsing/chat
-- [gstack](https://github.com/garrytan/gstack) for planning workflows
-- [Vercel Skills](https://github.com/vercel-labs/skills) for local skills management
+- **Google Engineering Culture**: Baked directly into our default `direct-llm` planner (Spec → Plan → Review → Ship).
+- [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills): A curated collection of excellent agent skills that we seamlessly inject as foundation skills to empower the local agent.
+- [DeepWiki Open](https://github.com/AsyncFuncAI/deepwiki-open) for wiki generation and wiki browsing/chat.
+- [gstack](https://github.com/garrytan/gstack) and [GSD] for alternative, more complex planning workflows.
+- [Vercel Skills](https://github.com/vercel-labs/skills) for standard local skills management.
 
 AI Planner adds:
 
@@ -68,8 +70,10 @@ Local repo -> DeepWiki wiki -> Tech detection -> Skill recommendations -> Local 
 ### New Project
 
 ```text
-Idea -> gstack planning -> Implementation plan -> Skill recommendations -> Local install
+Idea -> direct-llm planner (Google Culture) -> Implementation plan -> Foundation skills injected -> Local install
 ```
+
+*Note: You can easily switch to `gsd` or `gstack` if you need a different SDLC approach.*
 
 ## Requirements
 
@@ -125,6 +129,14 @@ node packages/cli/dist/index.js bootstrap
 
 `bootstrap` also tries to install `garrytan/gstack` into the selected target agent so the `new` flow can use the correct local agent setup.
 
+AI Planner will also print the direct fallback planning/recommendation model it is configured to use, for example:
+
+```text
+Planning fallback model: openai/gpt-4o-mini
+```
+
+This is separate from your IDE agent model. Right now, changing the model inside an IDE agent like `antigravity` does not change AI Planner's direct API fallback model.
+
 ## Step By Step: Existing Project
 
 ### Fast path
@@ -173,8 +185,28 @@ Useful flags:
 ### Fast path
 
 ```bash
-node packages/cli/dist/index.js new
+aip new
 ```
+
+### Folder-first flow
+
+If you already have a new project folder and a markdown idea file inside it, use the positional argument:
+
+```bash
+aip new ./my-new-project
+```
+
+AI Planner will:
+
+- use `./my-new-project` as the install location
+- save the plan to `./my-new-project/implementation_plan.md` by default
+- reuse `./my-new-project/implementation_plan.md` if it already exists, so you can retry skill recommendation/install without running planning again
+- automatically load one of these files when present:
+  - `prompt.md`
+  - `project-idea.md`
+  - `idea.md`
+  - `brief.md`
+- fall back to the editor only when no suitable markdown prompt file is found
 
 ### Recommended flow
 
@@ -192,6 +224,20 @@ node packages/cli/dist/index.js new
 ```bash
 node packages/cli/dist/index.js new --output docs/implementation-plan.md
 ```
+
+You can combine both:
+
+```bash
+node packages/cli/dist/index.js new --project-dir ./my-new-project --output ./my-new-project/docs/implementation-plan.md
+```
+
+If planning already succeeded earlier but skill installation failed, simply rerun:
+
+```bash
+node packages/cli/dist/index.js new --project-dir ./my-new-project
+```
+
+AI Planner will detect the existing `implementation_plan.md`, skip planning, and continue with recommendation/install.
 
 ### Example: Start from a single rough idea
 
@@ -254,7 +300,9 @@ AI Planner Local will explain that the target agent was resolved from `defaultAg
 
 ## Local Skill Sources
 
-AI Planner Local can use extra local skill directories as recommendation sources.
+AI Planner Local can use extra local skill directories as recommendation sources. 
+
+> **Credits:** We strongly believe in the simplicity and utility of [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills). To give developers the best out-of-the-box experience while respecting the author's work, we automatically recommend a curated list of these skills when you use the `direct-llm` planner. They are downloaded natively as `SKILL.md` files straight from the source.
 
 Important rule:
 
@@ -366,6 +414,7 @@ The repo includes:
 
 - `fixtures/existing-project` as the local existing-project fixture
 - `fixtures/local-skills` as the local skill-library fixture
+- `fixtures/new-project-idea` as the new-project prompt fixture
 
 ### Build before running tests
 
@@ -396,6 +445,9 @@ This verifies:
 
 - existing-project inspection against `fixtures/existing-project`
 - recommendation flow with local skills included
+- new-project flow against `fixtures/new-project-idea/prompt.md`
+- implementation plan save for a new project run
+- local skill install into the generated project workspace
 
 ### Manual smoke tests
 
@@ -410,6 +462,23 @@ New project:
 ```bash
 node packages/cli/dist/index.js new
 ```
+
+New project with the fixture prompt:
+
+1. Open [prompt.md](/E:/2026/Planning/ai-planner/fixtures/new-project-idea/prompt.md)
+2. Run:
+
+```bash
+node packages/cli/dist/index.js new --project-dir fixtures/new-project-idea
+```
+
+3. AI Planner will automatically load `fixtures/new-project-idea/prompt.md`
+4. Confirm the recommended skills
+5. Verify the output:
+   - `fixtures/new-project-idea/implementation_plan.md`
+   - `fixtures/new-project-idea/.agents/skills/`
+
+If you do this manual smoke test, remove generated artifacts before committing. The automated CLI test already covers this flow without requiring interactive editor input.
 
 Doctor:
 
@@ -435,7 +504,8 @@ If you want to improve the project:
 2. Run the test scripts above
 3. Use `fixtures/existing-project` for existing-project changes
 4. Use `fixtures/local-skills` for local recommendation changes
-5. Keep the product CLI-first and local-first
+5. Use `fixtures/new-project-idea` when changing the new-project planning flow
+6. Keep the product CLI-first and local-first
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for a shorter contributor checklist.
 
@@ -466,6 +536,29 @@ You can also override the Gemini model with:
 ```bash
 GEMINI_MODEL=gemini-2.5-flash
 ```
+
+Or set provider-specific model overrides explicitly:
+
+```bash
+LLM_PROVIDER=openai
+OPENAI_MODEL=gpt-4o-mini
+```
+
+```bash
+LLM_PROVIDER=claude
+ANTHROPIC_MODEL=claude-3-haiku-20240307
+```
+
+```bash
+LLM_PROVIDER=openrouter
+OPENROUTER_MODEL=openai/gpt-4o-mini
+```
+
+Important:
+
+- these settings control AI Planner's direct API calls
+- they do not yet change the model configured inside your IDE agent
+- the `new` planning flow may run in `gstack`, `direct LLM fallback`, or `mixed` mode, and the CLI now prints which one was used
 
 ## License
 

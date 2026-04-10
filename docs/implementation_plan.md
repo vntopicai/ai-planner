@@ -81,13 +81,13 @@ flowchart LR
 
 ```mermaid
 flowchart LR
-    A["aip doctor"] --> B["aip new"]
-    B --> C["Run gstack planning pipeline"]
-    C --> D["Save plan locally"]
-    D --> E["Extract tech stack"]
-    E --> F["Recommend skills"]
-    F --> G["Confirm install"]
-    G --> H["Install skills locally"]
+    A["aip doctor"] --> B["aip new [dir]"]
+    B --> C["Select Planner (direct-llm, gsd, gstack)"]
+    C --> D["Run planning pipeline"]
+    D --> E["Save plan locally"]
+    E --> F["Extract tech stack & Inject Skills"]
+    F --> G["Recommend & select skills"]
+    G --> H["Install natively (SKILL.md) or via npx"]
 ```
 
 ## UX Principles
@@ -263,34 +263,34 @@ AI Planner should focus on:
 
 ## Execution Phases
 
-### Phase 1: Reframe To CLI-First
+### Phase 1: Reframe To CLI-First (Completed)
 
 - update plan and docs to CLI-first
 - stop treating the web dashboard as the primary UX
 - define DeepWiki as the preferred wiki browsing surface
 - define web as optional companion only
 
-### Phase 2: Machine Setup Foundation
+### Phase 2: Machine Setup & Core Planners (Completed)
 
-- implement `aip bootstrap`
-- implement `aip doctor`
-- improve setup guidance
-- validate CLI permissions and local environment access
+- implement `aip bootstrap` and `aip doctor`
+- implement `direct-llm` planner explicitly baked with Google Engineering Culture (Hyrum's Law, Beyoncé Rule, Chesterton's Fence)
+- natively integrate `addyosmani/agent-skills` during planning
+- save plan artifacts locally and attach config state
+- merge tech detection + recommendation
 
-### Phase 3: Existing Repo Flow
+### Phase 3: Intelligence & Ecosystem Layer (Roadmap)
 
-- harden `aip existing`
-- save local wiki artifacts
-- merge detection + recommendation smoothly
-- add next-step guidance
-- add DeepWiki handoff/open behavior
+- implement `aip diff` (Compare plan vs reality)
+- implement `aip skills search <query>` (Contextual skill discovery)
+- auto-suggest skills when `package.json` changes
+- decouple planner engines to allow dynamic loading from npm packages
+- Model Context Protocol (MCP) Integration to expose state directly to IDEs
 
-### Phase 4: New Project Flow
+### Phase 4: Multi-project & Team Features (Roadmap)
 
-- simplify `aip new`
-- improve gstack orchestration reliability
-- save plan artifacts locally
-- connect planning directly to skills install
+- implement `aip workspace` for cross-repo dashboards
+- centralized status dashboard across ./api, ./web, ./mobile
+- shared planning configuration for teams
 
 ### Phase 5: Thin Viewer And Polish
 

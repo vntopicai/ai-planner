@@ -3,18 +3,21 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { Command } from 'commander'
 import chalk from 'chalk'
+import inquirer from 'inquirer'
 import ora from 'ora'
 import {
   checkDeepWikiHealth,
   detectInstalledProjectSkills,
   detectTechStack,
   generateWiki,
+  getDefaultLLMRuntimeInfo,
   installSkills,
   loadAIPlannerConfig,
   loadLocalSkillsFromDirectories,
   recommendSkills,
+  writeAgentHandoffFile,
 } from '@ai-planner/core'
-import type { Skill } from '@ai-planner/core'
+import type { Skill, WikiResult, WikiPageResult, SkillRecommendation } from '@ai-planner/core'
 import { resolveTargetAgentContext } from '../agent.js'
 import { promptSkillSelection } from '../prompts.js'
 
@@ -32,7 +35,7 @@ export function resolveExistingInstallCwd(repo: string): string | undefined {
 
 export async function inspectExistingProject(
   repo: string,
-  opts: { skipWiki?: boolean } = {}
+  opts: { skipWiki?: boolean; publish?: boolean } = {}
 ): Promise<ExistingProjectInspection> {
   let techStack: string[] = []
   let wikiWasGenerated = false
@@ -49,10 +52,10 @@ export async function inspectExistingProject(
       const healthy = await checkDeepWikiHealth()
       if (healthy) {
         const isUrl = repo.startsWith('http')
-      const wiki = await generateWiki(isUrl ? { repoUrl: repo } : { localPath: repo })
-      wikiWasGenerated = true
-      techStack = [...new Set(wiki.techStack)]
-      wikiOutputPath = await persistWikiArtifacts(repo, wiki)
+        const wiki = await generateWiki(isUrl ? { repoUrl: repo } : { localPath: repo, publishToDeepWiki: opts.publish })
+        wikiWasGenerated = true
+        techStack = Array.from(new Set<string>(wiki.techStack))
+        wikiOutputPath = await persistWikiArtifacts(repo, wiki)
       }
     }
   }
@@ -73,13 +76,16 @@ export const existingCommand = new Command('existing')
   .argument('<repo>', 'GitHub URL or local path to the project')
   .option('-a, --agent <agent>', 'Target agent')
   .option('--skip-wiki', 'Skip wiki generation and use local tech detection only')
+  .option('--publish', 'Publish local repository to DeepWiki for real-time chat UI')
   .option('-y, --yes', 'Run non-interactively and auto-select recommended skills')
   .option('--skip-install', 'Stop after recommendation and do not install skills')
-  .action(async (repo: string, opts: { agent?: string; skipWiki: boolean; yes?: boolean; skipInstall?: boolean }) => {
+  .action(async (repo: string, opts: { agent?: string; skipWiki: boolean; publish?: boolean; yes?: boolean; skipInstall?: boolean }) => {
     const agentContext = await resolveTargetAgentContext(opts.agent)
     const targetAgent = agentContext.agent
     console.log(chalk.bold.cyan('\nAI Planner Local - Existing Project\n'))
     console.log(chalk.dim(`Target agent resolved to ${targetAgent} (${describeAgentSource(agentContext.source)})`))
+    const recommendationRuntime = getDefaultLLMRuntimeInfo()
+    console.log(chalk.dim(`Recommendation fallback model: ${recommendationRuntime.provider}/${recommendationRuntime.model}`))
 
     if (!repo.startsWith('http')) {
       const validationError = getLocalRepoValidationError(repo)
@@ -125,15 +131,18 @@ export const existingCommand = new Command('existing')
           spinner.warn(chalk.yellow('DeepWiki is not running. Start it with: docker compose up -d'))
           spinner.info('Falling back to local tech stack detection...')
         } else {
-          spinner.text = 'Generating wiki from the project...'
+          spinner.text = opts.publish ? 'Zipping and uploading project to DeepWiki...' : 'Generating wiki from the project...'
           try {
-            const result = await inspectExistingProject(repo, { skipWiki: false })
+            const result = await inspectExistingProject(repo, { skipWiki: false, publish: opts.publish })
             techStack = result.techStack
             wikiWasGenerated = result.wikiWasGenerated
             wikiWasReused = result.wikiWasReused
             installedSkillIds = result.installedSkillIds
             wikiOutputPath = result.wikiOutputPath
             spinner.succeed(chalk.green('Wiki generated'))
+            if (opts.publish) {
+              console.log(chalk.cyan(`\n  👉 Wiki published successfully! Open http://localhost:3000 to chat with your codebase.\n`))
+            }
             console.log(chalk.dim(`  Tech detected from wiki/local scan: ${techStack.join(', ') || 'none'}`))
             if (wikiOutputPath) {
               console.log(chalk.dim(`  Wiki saved to: ${wikiOutputPath}`))
@@ -172,19 +181,19 @@ export const existingCommand = new Command('existing')
       })
       spinner.succeed(chalk.green(`Found ${recommendations.length} skill recommendations`))
 
+      let selected: SkillRecommendation[] = []
+
       if (recommendations.length === 0) {
-        console.log(chalk.yellow('\nNo skills matched. Use: aip skills add <repo> to add manually'))
-        return
-      }
+        console.log(chalk.yellow('\nNo skills matched for automatic installation.'))
+      } else {
+        if (opts.yes) {
+          process.env.AI_PLANNER_NON_INTERACTIVE = '1'
+        }
 
-      if (opts.yes) {
-        process.env.AI_PLANNER_NON_INTERACTIVE = '1'
-      }
-
-      const selected = await promptSkillSelection(recommendations)
-      if (selected.length === 0) {
-        console.log(chalk.yellow('\nNo skills selected. Done.'))
-        return
+        selected = await promptSkillSelection(recommendations)
+        if (selected.length === 0) {
+          console.log(chalk.yellow('\nNo skills selected.'))
+        }
       }
 
       const selectedSkillLines = selected.map((recommendation) => (
@@ -194,6 +203,18 @@ export const existingCommand = new Command('existing')
       const installCwd = resolveExistingInstallCwd(repo)
 
       if (opts.skipInstall) {
+        if (installCwd) {
+          const handoffPath = await writeAgentHandoffFile({
+            projectRoot: installCwd,
+            targetAgent,
+            projectType: 'existing',
+            techStack,
+            installedSkillIds,
+            selectedSkills: selected,
+            wikiIndexPath: wikiOutputPath,
+          })
+          console.log(chalk.dim(`  - Agent handoff: ${handoffPath}`))
+        }
         console.log(chalk.bold.green('\nRecommendation flow completed.'))
         console.log(chalk.dim(`  - Target agent: ${targetAgent} (${describeAgentSource(agentContext.source)})`))
         if (installCwd) {
@@ -231,6 +252,20 @@ export const existingCommand = new Command('existing')
         installSpinner.warn(chalk.yellow(`Failed: ${result.failed.join(', ')}`))
       }
 
+      if (installCwd) {
+        const finalInstalledSkills = await detectInstalledProjectSkills(installCwd)
+        const handoffPath = await writeAgentHandoffFile({
+          projectRoot: installCwd,
+          targetAgent,
+          projectType: 'existing',
+          techStack,
+          installedSkillIds: finalInstalledSkills.map((skill) => skill.id),
+          selectedSkills: selected,
+          wikiIndexPath: wikiOutputPath,
+        })
+        console.log(chalk.dim(`  - Agent handoff: ${handoffPath}`))
+      }
+
       console.log(chalk.bold.green('\nLocal agent environment is ready.'))
       console.log(chalk.dim(`  - Target agent: ${targetAgent} (${describeAgentSource(agentContext.source)})`))
       if (installCwd) {
@@ -243,9 +278,34 @@ export const existingCommand = new Command('existing')
         console.log(chalk.dim(`  - Wiki index: ${wikiOutputPath}`))
       }
       console.log(chalk.dim(`  - Existing project skills detected: ${installedSkillIds.length}`))
-      console.log(chalk.dim(`  - Installed skills: ${result.success.length}`))
-      console.log(chalk.dim(`  - Selected skill list:\n${selectedSkillBlock}`))
-      console.log(chalk.dim('  - Next step: open DeepWiki to browse/chat the wiki, then start your agent locally\n'))
+      
+      if (selected.length > 0) {
+        console.log(chalk.dim(`  - Selected skills: ${selected.length}`))
+        console.log(chalk.dim(`  - Selected skill list:\n${selectedSkillBlock}`))
+      }
+      
+      if (result && result.success.length > 0) {
+        console.log(chalk.dim(`  - Installed skills: ${result.success.length}`))
+      }
+      
+      console.log(chalk.dim('  - Next step: review the project context and start building with your local agent\n'))
+      
+      const { nextAction } = await inquirer.prompt([{
+        type: 'list',
+        name: 'nextAction',
+        message: 'What would you like to do next?',
+        choices: [
+          { name: 'View project status', value: 'status' },
+          { name: 'Exit and start building', value: 'exit' },
+        ]
+      }])
+
+      if (nextAction === 'status') {
+        const { runStatus } = await import('./status.js')
+        await runStatus(installCwd)
+      } else {
+        console.log(chalk.green('\nHappy building!'))
+      }
     } catch (err) {
       spinner.fail('Skill recommendation failed')
       console.error(chalk.red(String(err)))
@@ -283,7 +343,7 @@ function getLocalRepoValidationError(repo: string): string | null {
   return `Local path not found: \`${repo}\``
 }
 
-async function persistWikiArtifacts(repo: string, wiki: Awaited<ReturnType<typeof generateWiki>>): Promise<string | undefined> {
+async function persistWikiArtifacts(repo: string, wiki: WikiResult): Promise<string | undefined> {
   if (repo.startsWith('http')) {
     return undefined
   }
@@ -291,7 +351,7 @@ async function persistWikiArtifacts(repo: string, wiki: Awaited<ReturnType<typeo
   const wikiDir = resolve(repo, '.ai-planner', 'wiki')
   await mkdir(wikiDir, { recursive: true })
 
-  const pageLinks = (wiki.pages ?? []).map((page) => {
+  const pageLinks = (wiki.pages ?? []).map((page: WikiPageResult) => {
     const fileName = `${toSlug(page.title || page.id)}.md`
     return `- [${page.title}](./${fileName})`
   })
@@ -313,8 +373,8 @@ async function persistWikiArtifacts(repo: string, wiki: Awaited<ReturnType<typeo
         '',
         '## Related Pages',
         '',
-        ...page.relatedPages.map((relatedPageId) => {
-          const relatedPage = wiki.pages?.find((candidate) => candidate.id === relatedPageId)
+        ...page.relatedPages.map((relatedPageId: string) => {
+          const relatedPage = wiki.pages?.find((candidate: WikiPageResult) => candidate.id === relatedPageId)
           const relatedFileName = `${toSlug(relatedPage?.title || relatedPageId)}.md`
           return `- [${relatedPage?.title || relatedPageId}](./${relatedFileName})`
         }),

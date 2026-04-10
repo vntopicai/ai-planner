@@ -7,9 +7,10 @@ import {
   installSkills,
   listInstalledSkills,
   removeSkills,
-  runPlanningPipeline,
+  getPlanner,
   detectTechStack,
-  generateWiki
+  generateWiki,
+  loadAIPlannerConfig
 } from '@ai-planner/core'
 
 
@@ -111,12 +112,13 @@ export function startServer(port = getApiPortFromEnv()) {
   // Planning API
   app.post('/api/plan', async (req, res) => {
     try {
-      const { description } = req.body
+      const { description, planner } = req.body
       if (!description) return res.status(400).json({ error: 'Description required' })
       
-      // For SSE support, we could use a custom response format.
-      // But for simplicity, we'll just await the full result here in the MVP.
-      const result = await runPlanningPipeline(description)
+      const config = await loadAIPlannerConfig(process.cwd())
+      const plannerId = planner || config.defaultPlanner || 'gstack'
+      
+      const result = await getPlanner(plannerId).plan({ description })
       res.json(result)
     } catch (err: any) {
       res.status(500).json({ error: err.message })

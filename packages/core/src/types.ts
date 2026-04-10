@@ -58,6 +58,13 @@ export interface PlanningResult {
   architecture: string
   timeline: string
   skillSuggestions: string[]
+  runtime?: PlanningRuntimeInfo
+}
+
+export interface PlanningRuntimeInfo {
+  mode: 'gstack' | 'direct-llm' | 'mixed'
+  provider?: LLMProvider
+  model?: string
 }
 
 export type LLMProvider = 'gemini' | 'openai' | 'claude' | 'openrouter'
@@ -89,4 +96,6 @@ export interface BootstrapResult {
 export interface AIPlannerConfig {
   preferredSkillsDirs?: string[]
   defaultAgent?: string
+  defaultPlanner?: string
+  gsd?: Record<string, unknown>
 }

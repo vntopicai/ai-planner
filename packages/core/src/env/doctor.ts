@@ -4,6 +4,8 @@ import { execFile } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { checkDeepWikiHealth } from '../deepwiki/client.js'
+import { loadAIPlannerConfig } from '../config/loader.js'
+import { getPlanner } from '../planners/index.js'
 import type { BootstrapResult, MachineReadinessReport, ReadinessCheck, ReadinessStatus } from '../types.js'
 
 const execFileAsync = promisify(execFile)
@@ -11,6 +13,7 @@ const execFileAsync = promisify(execFile)
 interface CheckOptions {
   cwd?: string
   agent?: string
+  planner?: string
 }
 
 interface BootstrapOptions extends CheckOptions {
@@ -65,7 +68,12 @@ export async function runMachineReadinessChecks(options: CheckOptions = {}): Pro
     failFix: `Confirm the ${targetAgent} agent is installed and accessible on this machine.`,
     statusOnFailure: 'warn',
   }))
-  checks.push(await checkGstackInstallation(targetAgent))
+  
+  const config = await loadAIPlannerConfig(workspacePath)
+  const plannerName = options.planner ?? config.defaultPlanner ?? 'gstack'
+  const planner = getPlanner(plannerName)
+
+  checks.push(await checkPlannerInstallation(planner, targetAgent))
   checks.push(await checkDeepWiki())
 
   return {
@@ -77,12 +85,16 @@ export async function runMachineReadinessChecks(options: CheckOptions = {}): Pro
   }
 }
 
-export async function bootstrapLocalMachine(options: BootstrapOptions = {}): Promise<BootstrapResult> {
+export async function bootstrapLocalMachine(options: BootstrapOptions & { planner?: string } = {}): Promise<BootstrapResult> {
   const workspacePath = resolve(options.cwd ?? process.cwd())
   const createEnvFile = options.createEnvFile ?? true
   const startDeepWiki = options.startDeepWiki ?? true
   const targetAgent = options.agent ?? 'antigravity'
   const actions: string[] = []
+  
+  const config = await loadAIPlannerConfig(workspacePath)
+  const plannerName = options.planner ?? config.defaultPlanner ?? 'gstack'
+  const planner = getPlanner(plannerName)
 
   if (createEnvFile) {
     const envCreated = await ensureEnvFile(workspacePath)
@@ -106,11 +118,16 @@ export async function bootstrapLocalMachine(options: BootstrapOptions = {}): Pro
     }
   }
 
-  const gstackResult = await ensureGstackInstalledForAgent(workspacePath, targetAgent)
-  if (gstackResult === 'installed') {
-    actions.push(`Installed gstack skills for target agent ${targetAgent}`)
-  } else if (gstackResult === 'failed') {
-    actions.push(`Tried to install gstack skills for ${targetAgent}, but the install failed`)
+  try {
+    const isAvailable = await planner.isAvailable(targetAgent)
+    if (isAvailable) {
+      actions.push(`Planner ${planner.name} is already installed for target agent ${targetAgent}`)
+    } else {
+      await planner.install({ agent: targetAgent, scope: 'local' })
+      actions.push(`Installed planner ${planner.name} for target agent ${targetAgent}`)
+    }
+  } catch {
+    actions.push(`Tried to install planner ${planner.name} for ${targetAgent}, but the install failed`)
   }
 
   const report = await runMachineReadinessChecks(options)
@@ -302,34 +319,34 @@ async function checkLlmConfiguration(envPath: string): Promise<ReadinessCheck> {
   }
 }
 
-async function checkGstackInstallation(targetAgent: string): Promise<ReadinessCheck> {
-  const result = await runCommand('npx', ['skills', 'list', '-a', targetAgent])
-  if (!result.ok) {
+async function checkPlannerInstallation(planner: any, targetAgent: string): Promise<ReadinessCheck> {
+  try {
+    const isAvail = await planner.isAvailable(targetAgent)
+    if (isAvail) {
+      return {
+        id: 'planner-agent',
+        label: `${planner.name} planner`,
+        status: 'pass',
+        summary: `${planner.name} is available for ${targetAgent}`,
+      }
+    }
+
     return {
-      id: 'gstack-agent',
-      label: 'gstack skills',
+      id: 'planner-agent',
+      label: `${planner.name} planner`,
       status: 'warn',
-      summary: `Unable to verify whether gstack is installed for ${targetAgent}`,
-      details: normalizeCommandFailure(result),
-      fix: `Run \`aip bootstrap --agent ${targetAgent}\` to install gstack skills for that agent.`,
+      summary: `${planner.name} is not available for ${targetAgent}`,
+      fix: `Run \`aip bootstrap --agent ${targetAgent}\` before using \`aip new\` on this machine.`,
     }
-  }
-
-  if (hasGstackSkillsInstalled(result.stdout)) {
+  } catch (error: any) {
     return {
-      id: 'gstack-agent',
-      label: 'gstack skills',
-      status: 'pass',
-      summary: `gstack is installed for ${targetAgent}`,
+      id: 'planner-agent',
+      label: `${planner.name} planner`,
+      status: 'warn',
+      summary: `Unable to verify whether ${planner.name} is installed for ${targetAgent}`,
+      details: error.message || String(error),
+      fix: `Run \`aip bootstrap --agent ${targetAgent}\` to install planner skills for that agent.`,
     }
-  }
-
-  return {
-    id: 'gstack-agent',
-    label: 'gstack skills',
-    status: 'warn',
-    summary: `gstack is not installed for ${targetAgent}`,
-    fix: `Run \`aip bootstrap --agent ${targetAgent}\` before using \`aip new\` on this machine.`,
   }
 }
 
@@ -351,25 +368,6 @@ async function checkDeepWiki(): Promise<ReadinessCheck> {
     summary: 'DeepWiki is not reachable right now',
     fix: 'Run `docker compose up -d` or use `aip bootstrap` to start DeepWiki.',
   }
-}
-
-async function ensureGstackInstalledForAgent(
-  workspacePath: string,
-  targetAgent: string
-): Promise<'already-installed' | 'installed' | 'failed'> {
-  const check = await runCommand('npx', ['skills', 'list', '-a', targetAgent], workspacePath)
-  if (check.ok && hasGstackSkillsInstalled(check.stdout)) {
-    return 'already-installed'
-  }
-
-  const install = await runCommand(
-    'npx',
-    ['skills', 'add', 'garrytan/gstack', '-a', targetAgent, '-y'],
-    workspacePath,
-    60000
-  )
-
-  return install.ok ? 'installed' : 'failed'
 }
 
 async function runCommand(command: string, args: string[], cwd?: string, timeout = 15000): Promise<CommandResult> {
@@ -406,17 +404,6 @@ function normalizeExecutable(command: string): string {
   }
 
   return command
-}
-
-function hasGstackSkillsInstalled(output: string): boolean {
-  const normalized = output.toLowerCase()
-  return [
-    'garrytan/gstack',
-    'office-hours',
-    'plan-ceo-review',
-    'plan-eng-review',
-    'plan-design-review',
-  ].some((token) => normalized.includes(token))
 }
 
 function parseSimpleEnv(content: string): Record<string, string> {
