@@ -24,6 +24,7 @@ AI Planner Local is a thin orchestrator around a few strong tools and concepts:
 
 - **Google Engineering Culture**: Baked directly into our default `direct-llm` planner (Spec → Plan → Review → Ship).
 - [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills): A curated collection of excellent agent skills that we seamlessly inject as foundation skills to empower the local agent.
+- [mattpocock/skills](https://github.com/mattpocock/skills): Practical engineering workflow skills, including TDD, diagnosis, triage, PRDs, issue breakdown, and architecture improvement.
 - [DeepWiki Open](https://github.com/AsyncFuncAI/deepwiki-open) for wiki generation and wiki browsing/chat.
 - [gstack](https://github.com/garrytan/gstack) and [GSD] for alternative, more complex planning workflows.
 - [Vercel Skills](https://github.com/vercel-labs/skills) for standard local skills management.
@@ -302,7 +303,7 @@ AI Planner Local will explain that the target agent was resolved from `defaultAg
 
 AI Planner Local can use extra local skill directories as recommendation sources. 
 
-> **Credits:** We strongly believe in the simplicity and utility of [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills). To give developers the best out-of-the-box experience while respecting the author's work, we automatically recommend a curated list of these skills when you use the `direct-llm` planner. They are downloaded natively as `SKILL.md` files straight from the source.
+> **Credits:** We strongly believe in the simplicity and utility of [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) and [mattpocock/skills](https://github.com/mattpocock/skills). To give developers the best out-of-the-box experience while respecting the authors' work, we recommend curated skills from these sources when they fit the project. They are downloaded natively as `SKILL.md` files straight from the source.
 
 Important rule:
 

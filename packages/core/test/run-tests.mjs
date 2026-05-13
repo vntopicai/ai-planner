@@ -10,6 +10,7 @@ import { getDefaultLLMRuntimeInfo } from '../dist/llm/provider.js'
 import { writeAgentHandoffFile } from '../dist/agent/handoff.js'
 import { loadLocalSkillsFromDirectories } from '../dist/skills/local-directory.js'
 import { installSkills } from '../dist/skills/cli-wrapper.js'
+import { MATT_POCOCK_SKILLS } from '../dist/skills/crawler.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(__dirname, '../../..')
@@ -50,6 +51,19 @@ async function main() {
   const localSkills = await loadLocalSkillsFromDirectories(config.preferredSkillsDirs ?? [])
   assert.ok(localSkills.some((skill) => skill.id === 'backend-development'), 'expected backend-development local skill to be loaded')
 
+  const mattPocockSkillIds = new Set(MATT_POCOCK_SKILLS.map((skill) => skill.id))
+  for (const skillId of [
+    'setup-matt-pocock-skills',
+    'tdd',
+    'diagnose',
+    'triage',
+    'to-prd',
+    'to-issues',
+    'zoom-out',
+  ]) {
+    assert.ok(mattPocockSkillIds.has(skillId), `expected mattpocock/skills fallback catalog to include ${skillId}`)
+  }
+
   const tempProject = await mkdtemp(resolve(tmpdir(), 'ai-planner-core-test-'))
   try {
     const backendSkill = localSkills.find((skill) => skill.id === 'backend-development')
@@ -68,6 +82,19 @@ async function main() {
     assert.ok(
       existsSync(resolve(tempProject, '.agents/skills/backend-development/SKILL.md')),
       'expected local skill to be copied into the target project .agents/skills folder'
+    )
+
+    const mattInstallResult = await installSkills([
+      {
+        repo: 'mattpocock/skills',
+        name: 'setup-matt-pocock-skills',
+      },
+    ], 'antigravity', { cwd: tempProject })
+
+    assert.equal(mattInstallResult.failed.length, 0, 'expected mattpocock/skills native install to succeed')
+    assert.ok(
+      existsSync(resolve(tempProject, '.agents/skills/setup-matt-pocock-skills/SKILL.md')),
+      'expected mattpocock/skills to install natively into the target project .agents/skills folder'
     )
 
     const handoffPath = await writeAgentHandoffFile({

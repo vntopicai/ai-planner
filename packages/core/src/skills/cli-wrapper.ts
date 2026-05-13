@@ -8,7 +8,10 @@ import type { Skill } from '../types.js'
 const execFileAsync = promisify(execFile)
 
 // Repos that use native agent install methods (not npx skills add)
-const NATIVE_INSTALL_REPOS = new Set(['addyosmani/agent-skills'])
+const NATIVE_INSTALL_REPOS = new Set([
+  'addyosmani/agent-skills',
+  'mattpocock/skills',
+])
 
 /**
  * Wrapper around `npx skills` CLI.
